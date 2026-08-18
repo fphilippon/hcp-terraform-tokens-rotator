@@ -1,0 +1,39 @@
+{
+  "state_variable": "HCP_TF_ROTATION_STATE",
+  "targets": [
+    {
+      "name": "infra-production",
+      "organization": "example-org",
+      "team_id": "team-xxxxxxxx",
+      "initial_token_id": "at-xxxxxxxx",
+      "description_prefix": "github-actions/infra-production",
+      "destination": {
+        "type": "github_secret",
+        "repository": "example-org/infrastructure",
+        "secret_name": "HCP_TF_TOKEN",
+        "environment": "production"
+      },
+      "validation_workspace_id": "ws-xxxxxxxx",
+      "rotate_before_days": 30,
+      "new_token_lifetime_days": 90,
+      "overlap_hours": 24
+    },
+    {
+      "name": "workspace-consumer",
+      "organization": "example-org",
+      "team_id": "team-yyyyyyyy",
+      "initial_token_id": "at-yyyyyyyy",
+      "description_prefix": "github-actions/workspace-consumer",
+      "destination": {
+        "type": "hcp_workspace_variable",
+        "workspace_id": "ws-yyyyyyyy",
+        "variable_id": "var-yyyyyyyy",
+        "expected_key": "HCP_TF_TOKEN"
+      },
+      "validation_workspace_id": "ws-yyyyyyyy",
+      "rotate_before_days": 30,
+      "new_token_lifetime_days": 90,
+      "overlap_hours": 24
+    }
+  ]
+}
