@@ -1,0 +1,74 @@
+name: Rotate HCP Terraform team tokens
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Inventory only, or rotate tokens that are inside the policy window"
+        required: true
+        type: choice
+        options:
+          - inventory
+          - rotate
+        default: inventory
+      dry_run:
+        description: "Do not create tokens, update secrets, or revoke tokens"
+        required: true
+        type: boolean
+        default: true
+
+# The scheduled job is enabled only after the repository variable
+# HCP_ROTATION_ENABLED is set to "true". Manual inventory remains available.
+permissions:
+  contents: read
+
+concurrency:
+  group: hcp-terraform-team-token-rotation
+  cancel-in-progress: false
+
+jobs:
+  rotate:
+    if: github.event_name == 'workflow_dispatch' || vars.HCP_ROTATION_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      HCP_TF_ROTATION_BOOTSTRAP: ${{ secrets.HCP_TF_ROTATION_BOOTSTRAP }}
+      HCP_TF_HOSTNAME: ${{ vars.HCP_TF_HOSTNAME || 'app.terraform.io' }}
+      HCP_TF_ROTATION_STATE_JSON: ${{ vars.HCP_TF_ROTATION_STATE }}
+      GH_REPO: ${{ github.repository }}
+      MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'rotate' }}
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+
+    steps:
+      - name: Check out rotation configuration
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Create short-lived GitHub App token
+        if: env.MODE == 'rotate'
+        id: github-app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        # Keep the App installation itself least-privileged. The token must
+        # inherit its Variables permission so rotation state can be persisted.
+        with:
+          client-id: ${{ vars.GH_APP_CLIENT_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ vars.GH_APP_REPOSITORIES || github.repository }}
+
+      - name: Inventory or rotate HCP Terraform team tokens
+        env:
+          GH_TOKEN: ${{ steps.github-app-token.outputs.token }}
+        run: >-
+          python scripts/rotate_hcp_team_tokens.py
+          --config config/targets.json
+          --mode "$MODE"
+          --dry-run "$DRY_RUN"
